@@ -11,6 +11,8 @@ interface Props {
     forcePathStyle: boolean;
     checksumMode?: string;
   }) => void;
+  persistEnabled: boolean;
+  onTogglePersist: (enabled: boolean) => void;
 }
 
 const PRESETS = [
@@ -40,7 +42,7 @@ const iconEyeOff = (
   </svg>
 );
 
-export default function ConnectionForm({ onConnect }: Props) {
+export default function ConnectionForm({ onConnect, persistEnabled, onTogglePersist }: Props) {
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [region, setRegion] = useState("us-east-1");
@@ -85,8 +87,9 @@ export default function ConnectionForm({ onConnect }: Props) {
       {loading && <div className="yield-bar" style={{ borderRadius: 0 }} />}
       <div className="panel-body">
         <p className="panel-intro">
-          Tune into any S3-compatible endpoint. Credentials are held in server memory only &mdash;
-          never written to disk, discarded when the server stops.
+          Tune into any S3-compatible endpoint. When session memory is on,
+          credentials persist in browser storage across restarts. Turn it off
+          to keep everything in session memory only &mdash; no trace left behind.
         </p>
 
         <div className="preset-rack">
@@ -191,6 +194,25 @@ export default function ConnectionForm({ onConnect }: Props) {
                 </span>
               </label>
             </div>
+          </div>
+
+          <div className="field">
+            <label className="field-label">Session Memory</label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={persistEnabled}
+                onChange={(e) => onTogglePersist(e.target.checked)}
+              />
+              <span className="toggle-copy">
+                <span className="toggle-title">Remember connections in browser storage</span>
+                <span className="toggle-desc">
+                  When enabled, connection details (including credentials) are saved to
+                  localStorage so they survive page refreshes and browser restarts.
+                  Disable to keep everything in session memory only &mdash; no trace left behind.
+                </span>
+              </span>
+            </label>
           </div>
 
           <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>

@@ -1,8 +1,17 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import ConnectionForm from "./components/ConnectionForm";
 import BucketExplorer from "./components/BucketExplorer";
 import { api } from "./api";
 import type { Connection, S3Error } from "./types";
+import {
+  loadSettings,
+  saveSettings,
+  upsertConnection,
+  removeConnection as removeStoredConnection,
+  loadConnections,
+  clearAllConnections,
+} from "./storage";
+import type { AppSettings, StoredConnection } from "./storage";
 
 type View = "connections" | "explorer";
 
@@ -32,11 +41,51 @@ export default function App() {
   const [view, setView] = useState<View>("connections");
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+
+  // Persist settings whenever they change
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
+
+  // On mount, if persistence is on, attempt to re-connect stored channels
+  useEffect(() => {
+    if (!settings.persistConnections) return;
+
+    const stored = loadConnections();
+    if (stored.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const cfg of stored) {
+        if (cancelled) break;
+        try {
+          const result = await api.connect(cfg);
+          if (!cancelled) {
+            setConnections((prev) => {
+              // avoid duplicate if already added
+              if (prev.some((c) => c.id === result.id)) return prev;
+              return [...prev, result];
+            });
+            notify(`Restored "${result.name}" — ${result.bucketCount} buckets`, "success");
+          }
+        } catch {
+          // stale credentials — silently skip
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // Only run on initial mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const notify = useCallback((message: string, type: "success" | "error") => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
   }, []);
+
+  // Build a lookup map from connection id → stored config so we can remove the right one
+  const connToStoredRef = useRef<Map<string, StoredConnection>>(new Map());
 
   const handleConnect = async (config: {
     name: string; endpoint: string; region: string;
@@ -49,6 +98,22 @@ export default function App() {
       setActiveConnectionId(result.id);
       setView("explorer");
       notify(`Connected! Found ${result.bucketCount} buckets.`, "success");
+
+      // Persist to localStorage if enabled
+      if (settings.persistConnections) {
+        const stored: StoredConnection = {
+          name: config.name,
+          endpoint: config.endpoint,
+          region: config.region,
+          accessKeyId: config.accessKeyId,
+          secretAccessKey: config.secretAccessKey,
+          sessionToken: config.sessionToken || undefined,
+          forcePathStyle: config.forcePathStyle,
+          checksumMode: config.checksumMode,
+        };
+        connToStoredRef.current.set(result.id, stored);
+        upsertConnection(stored);
+      }
     } catch (err) {
       const e = err as S3Error;
       notify(e.error || "Connection failed", "error");
@@ -57,8 +122,25 @@ export default function App() {
 
   const handleDisconnect = async (id: string) => {
     await api.disconnect(id);
+
+    // Remove from localStorage if persisted
+    const stored = connToStoredRef.current.get(id);
+    if (stored && settings.persistConnections) {
+      removeStoredConnection(stored);
+    }
+    connToStoredRef.current.delete(id);
+
     setConnections((prev) => prev.filter((c) => c.id !== id));
     if (activeConnectionId === id) { setActiveConnectionId(null); setView("connections"); }
+  };
+
+  const handleTogglePersist = (enabled: boolean) => {
+    setSettings((prev) => ({ ...prev, persistConnections: enabled }));
+    if (!enabled) {
+      // When turning off, clear stored connections entirely
+      clearAllConnections();
+      connToStoredRef.current.clear();
+    }
   };
 
   const handleSelectConnection = (id: string) => {
@@ -126,7 +208,13 @@ export default function App() {
               <div className="bank-foot"><span className="panel-label">Calibrate below</span></div>
             </aside>
             <div className="bay">
-              <div className="bay-scroll"><div className="bay-narrow"><ConnectionForm onConnect={handleConnect} /></div></div>
+              <div className="bay-scroll"><div className="bay-narrow">
+                <ConnectionForm
+                  onConnect={handleConnect}
+                  persistEnabled={settings.persistConnections}
+                  onTogglePersist={handleTogglePersist}
+                />
+              </div></div>
             </div>
           </div>
         ) : (
