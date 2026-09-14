@@ -10,22 +10,23 @@ interface Props {
     sessionToken?: string;
     forcePathStyle: boolean;
     checksumMode?: string;
-  }) => void;
+  }) => Promise<void> | void;
   persistEnabled: boolean;
   onTogglePersist: (enabled: boolean) => void;
 }
 
 const PRESETS = [
-  { label: "AWS S3", endpoint: "", region: "us-east-1", pathStyle: false, checksum: "supported" },
-  { label: "MinIO", endpoint: "http://localhost:9000", region: "us-east-1", pathStyle: true, checksum: "compatible" },
-  { label: "Cloudflare R2", endpoint: "", region: "auto", pathStyle: false, checksum: "compatible" },
-  { label: "DigitalOcean Spaces", endpoint: "", region: "nyc3", pathStyle: false, checksum: "compatible" },
-  { label: "Backblaze B2", endpoint: "", region: "us-west-004", pathStyle: true, checksum: "supported" },
+  { label: "AWS S3", desc: "s3.amazonaws.com", endpoint: "", region: "us-east-1", pathStyle: false, checksum: "supported" },
+  { label: "MinIO", desc: "Local · localhost:9000", endpoint: "http://localhost:9000", region: "us-east-1", pathStyle: true, checksum: "compatible" },
+  { label: "Cloudflare R2", desc: "Custom endpoint", endpoint: "", region: "auto", pathStyle: false, checksum: "compatible" },
+  { label: "DigitalOcean", desc: "Spaces · nyc3", endpoint: "", region: "nyc3", pathStyle: false, checksum: "compatible" },
+  { label: "Backblaze B2", desc: "S3-compatible", endpoint: "", region: "us-west-004", pathStyle: true, checksum: "supported" },
+  { label: "Custom", desc: "Any endpoint", endpoint: "", region: "us-east-1", pathStyle: true, checksum: "compatible" },
 ];
 
-const iconSignal = (
-  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 7.5h3l2-4 2 8 2-6 1.5 2H14" />
+const iconCheck = (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 6.5 4.8 9 10 3.5" />
   </svg>
 );
 
@@ -42,6 +43,12 @@ const iconEyeOff = (
   </svg>
 );
 
+const iconChevron = (
+  <svg className="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 5l4 4 4-4" />
+  </svg>
+);
+
 export default function ConnectionForm({ onConnect, persistEnabled, onTogglePersist }: Props) {
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -51,175 +58,211 @@ export default function ConnectionForm({ onConnect, persistEnabled, onTogglePers
   const [sessionToken, setSessionToken] = useState("");
   const [forcePathStyle, setForcePathStyle] = useState(true);
   const [checksumMode, setChecksumMode] = useState("compatible");
-  const [showToken, setShowToken] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handlePreset = (preset: (typeof PRESETS)[0]) => {
-    setEndpoint(preset.endpoint);
-    setRegion(preset.region);
-    setForcePathStyle(preset.pathStyle);
-    setChecksumMode(preset.checksum ?? "compatible");
+  const handlePreset = (preset: (typeof PRESETS)[number]) => {
+    if (preset.label !== "Custom") {
+      setEndpoint(preset.endpoint);
+      setRegion(preset.region);
+      setForcePathStyle(preset.pathStyle);
+      setChecksumMode(preset.checksum ?? "compatible");
+    }
     setActivePreset(preset.label);
+    setError(null);
   };
+
+  const canSubmit = accessKeyId.trim() !== "" && secretAccessKey.trim() !== "" && !loading;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     setLoading(true);
-    await onConnect({
-      name: name || endpoint || "AWS S3",
-      endpoint, region, accessKeyId, secretAccessKey,
-      sessionToken: sessionToken || undefined,
-      forcePathStyle, checksumMode,
-    });
-    setLoading(false);
+    setError(null);
+    try {
+      await onConnect({
+        name: name.trim() || endpoint.trim() || "AWS S3",
+        endpoint: endpoint.trim(),
+        region: region.trim() || "us-east-1",
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim(),
+        sessionToken: sessionToken.trim() || undefined,
+        forcePathStyle,
+        checksumMode,
+      });
+    } catch (err: any) {
+      setError(err?.error || "Connection failed. Check your endpoint and keys.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="panel connection-form">
-      <div className="panel-head">
-        <span className="panel-title">
-          <span className="icon">{iconSignal}</span>
-          Channel Calibration
-        </span>
-        <span className="panel-label">Credentials</span>
-      </div>
-      {loading && <div className="yield-bar" style={{ borderRadius: 0 }} />}
-      <div className="panel-body">
-        <p className="panel-intro">
-          Tune into any S3-compatible endpoint. When session memory is on,
-          credentials persist in browser storage across restarts. Turn it off
-          to keep everything in session memory only &mdash; no trace left behind.
-        </p>
-
-        <div className="preset-rack">
+    <form onSubmit={handleSubmit} className="form-stack" noValidate>
+      {/* Step 1 — Provider */}
+      <div className="form-section">
+        <div className="section-head">
+          <span className={`step-num${activePreset ? " done" : ""}`}>{activePreset ? iconCheck : "1"}</span>
+          <div>
+            <h3>Provider</h3>
+            <p>Start from a preset to prefill region and addressing defaults.</p>
+          </div>
+        </div>
+        <div className="preset-grid" role="group" aria-label="Provider presets">
           {PRESETS.map((p) => (
             <button
               key={p.label}
               type="button"
-              className={`preset-chip${activePreset === p.label ? " on" : ""}`}
+              className={`preset-btn${activePreset === p.label ? " on" : ""}`}
               onClick={() => handlePreset(p)}
+              aria-pressed={activePreset === p.label}
             >
-              {p.label}
+              <span className="p-name">{p.label}</span>
+              <span className="p-desc">{p.desc}</span>
             </button>
           ))}
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="calib-grid">
-          <div className="field-row">
-            <div className="field">
-              <label className="field-label" htmlFor="cn-name">Connection Name</label>
-              <input id="cn-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="my-minio" />
-            </div>
-            <div className="field">
-              <label className="field-label" htmlFor="cn-region">Region</label>
-              <input id="cn-region" className="input" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="us-east-1" />
-            </div>
+      {/* Step 2 — Endpoint */}
+      <div className="form-section">
+        <div className="section-head">
+          <span className="step-num">2</span>
+          <div>
+            <h3>Endpoint &amp; region</h3>
+            <p>Where is your storage? Leave the endpoint empty for AWS S3.</p>
           </div>
-
+        </div>
+        <div className="field-grid">
           <div className="field">
-            <label className="field-label" htmlFor="cn-endpoint">Custom Endpoint URL</label>
+            <label className="field-label" htmlFor="cn-endpoint">Endpoint URL</label>
             <input
               id="cn-endpoint"
-              className="input"
+              className="input mono"
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
               placeholder="https://s3.amazonaws.com"
+              inputMode="url"
+              autoComplete="url"
             />
-            <span className="field-hint">Leave empty for AWS S3. Use http://host:port for local/MinIO.</span>
+            <span className="field-hint">Local MinIO looks like <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>http://localhost:9000</code>. R2 and Spaces give you a custom URL.</span>
           </div>
-
           <div className="field-row">
             <div className="field">
-              <label className="field-label" htmlFor="cn-key">Access Key ID <span className="req">*</span></label>
-              <input id="cn-key" className="input" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} placeholder="AKIA..." required />
+              <label className="field-label" htmlFor="cn-region">Region</label>
+              <input id="cn-region" className="input mono" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="us-east-1" autoComplete="off" />
             </div>
             <div className="field">
-              <label className="field-label" htmlFor="cn-secret">Secret Access Key <span className="req">*</span></label>
-              <div className="input-with-action">
-                <input
-                  id="cn-secret"
-                  className="input"
-                  type={showToken ? "text" : "password"}
-                  value={secretAccessKey}
-                  onChange={(e) => setSecretAccessKey(e.target.value)}
-                  placeholder="••••••••••••"
-                  required
-                />
-                <span className="input-action">
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    onClick={() => setShowToken(!showToken)}
-                    aria-label={showToken ? "Hide secret" : "Show secret"}
-                  >
-                    {showToken ? iconEyeOff : iconEye}
-                  </button>
-                </span>
+              <label className="field-label" htmlFor="cn-name">Display name <span className="opt">(optional)</span></label>
+              <input id="cn-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. staging-minio" autoComplete="off" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 3 — Credentials */}
+      <div className="form-section">
+        <div className="section-head">
+          <span className={`step-num${accessKeyId && secretAccessKey ? " done" : ""}`}>3</span>
+          <div>
+            <h3>Credentials</h3>
+            <p>Keys are sent to the local server only, never stored there.</p>
+          </div>
+        </div>
+        <div className="field-grid">
+          <div className="field">
+            <label className="field-label" htmlFor="cn-key">Access key ID <span className="req">*</span></label>
+            <input id="cn-key" className="input mono" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} placeholder="AKIA…" required autoComplete="username" />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="cn-secret">Secret access key <span className="req">*</span></label>
+            <div className="input-with-action">
+              <input
+                id="cn-secret"
+                className="input mono"
+                type={showSecret ? "text" : "password"}
+                value={secretAccessKey}
+                onChange={(e) => setSecretAccessKey(e.target.value)}
+                placeholder="••••••••••••"
+                required
+                autoComplete="current-password"
+              />
+              <span className="input-action">
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setShowSecret(!showSecret)}
+                  aria-label={showSecret ? "Hide secret" : "Show secret"}
+                >
+                  {showSecret ? iconEyeOff : iconEye}
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Advanced — collapsed */}
+      <div className="form-section">
+        <details className="advanced">
+          <summary>Advanced settings {iconChevron}</summary>
+          <div className="advanced-body">
+            <div className="field">
+              <label className="field-label" htmlFor="cn-token">Session token <span className="opt">(temporary credentials only)</span></label>
+              <input id="cn-token" className="input mono" value={sessionToken} onChange={(e) => setSessionToken(e.target.value)} placeholder="Paste STS session token" autoComplete="off" />
+            </div>
+            <label className="check-row">
+              <input type="checkbox" checked={forcePathStyle} onChange={(e) => setForcePathStyle(e.target.checked)} />
+              <span className="check-copy">
+                <span className="check-title">Use path-style addressing</span>
+                <span className="check-desc">Required for MinIO and most S3-compatible services. Turn off for AWS S3 virtual-hosted style.</span>
+              </span>
+            </label>
+            <div className="field">
+              <span className="field-label" id="checksum-label">Checksum handling</span>
+              <div className="radio-row" role="radiogroup" aria-labelledby="checksum-label">
+                <label className={`radio-card${checksumMode === "compatible" ? " on" : ""}`}>
+                  <input type="radio" name="checksumMode" value="compatible" checked={checksumMode === "compatible"} onChange={() => setChecksumMode("compatible")} />
+                  <span className="check-copy">
+                    <span className="check-title">Compatible</span>
+                    <span className="check-desc">Works with MinIO, R2, Spaces. Recommended.</span>
+                  </span>
+                </label>
+                <label className={`radio-card${checksumMode === "supported" ? " on" : ""}`}>
+                  <input type="radio" name="checksumMode" value="supported" checked={checksumMode === "supported"} onChange={() => setChecksumMode("supported")} />
+                  <span className="check-copy">
+                    <span className="check-title">Full (AWS)</span>
+                    <span className="check-desc">CRC32 validation. AWS S3 only.</span>
+                  </span>
+                </label>
               </div>
             </div>
-          </div>
-
-          <div className="field">
-            <label className="field-label" htmlFor="cn-token">Session Token <span style={{ textTransform: "none", letterSpacing: 0, color: "var(--ink-4)" }}>(optional)</span></label>
-            <input id="cn-token" className="input" value={sessionToken} onChange={(e) => setSessionToken(e.target.value)} placeholder="temporary credentials only" />
-          </div>
-
-          <div className="field">
-            <label className="field-label">Addressing &amp; Integrity</label>
-            <label className="toggle-row">
-              <input type="checkbox" checked={forcePathStyle} onChange={(e) => setForcePathStyle(e.target.checked)} />
-              <span className="toggle-copy">
-                <span className="toggle-title">Force path-style addressing</span>
-                <span className="toggle-desc">Required for MinIO, Ceph, and most S3-compatible services. Disable for AWS S3.</span>
+            <label className="check-row">
+              <input type="checkbox" checked={persistEnabled} onChange={(e) => onTogglePersist(e.target.checked)} />
+              <span className="check-copy">
+                <span className="check-title">Remember in this browser</span>
+                <span className="check-desc">Saves connection details (including keys) to localStorage so they survive refreshes. Off means memory-only.</span>
               </span>
             </label>
           </div>
-
-          <div className="field">
-            <label className="field-label">Checksum Compatibility</label>
-            <div className="radio-stack">
-              <label className={`radio-card${checksumMode === "compatible" ? " on" : ""}`}>
-                <input type="radio" name="checksumMode" value="compatible" checked={checksumMode === "compatible"} onChange={() => setChecksumMode("compatible")} />
-                <span className="radio-copy">
-                  <span className="name">Compatible</span>
-                  <span className="desc">Skips optional checksum headers &mdash; safer for non-AWS S3 (MinIO, Ceph, R2)</span>
-                </span>
-              </label>
-              <label className={`radio-card${checksumMode === "supported" ? " on" : ""}`}>
-                <input type="radio" name="checksumMode" value="supported" checked={checksumMode === "supported"} onChange={() => setChecksumMode("supported")} />
-                <span className="radio-copy">
-                  <span className="name">Full integrity (AWS S3)</span>
-                  <span className="desc">Enables CRC32 checksum validation on uploads &mdash; AWS S3 only</span>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <div className="field">
-            <label className="field-label">Session Memory</label>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={persistEnabled}
-                onChange={(e) => onTogglePersist(e.target.checked)}
-              />
-              <span className="toggle-copy">
-                <span className="toggle-title">Remember connections in browser storage</span>
-                <span className="toggle-desc">
-                  When enabled, connection details (including credentials) are saved to
-                  localStorage so they survive page refreshes and browser restarts.
-                  Disable to keep everything in session memory only &mdash; no trace left behind.
-                </span>
-              </span>
-            </label>
-          </div>
-
-          <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
-            {loading ? "Calibrating\u2026" : "Connect & Test"}
-          </button>
-        </form>
+        </details>
       </div>
-    </div>
+
+      {error && (
+        <div className="notification notification-error" role="alert" style={{ position: "static", transform: "none", maxWidth: "none", marginTop: 16 }}>
+          <span className="n-dot" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="form-submit">
+        <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={!canSubmit}>
+          {loading ? "Connecting…" : "Connect"}
+        </button>
+        <p className="form-note">We list your buckets immediately so you know the keys work.</p>
+      </div>
+    </form>
   );
 }

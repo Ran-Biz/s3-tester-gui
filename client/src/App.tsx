@@ -13,48 +13,36 @@ import {
 } from "./storage";
 import type { AppSettings, StoredConnection } from "./storage";
 
-type View = "connections" | "explorer";
-
 const iconBucket = (
-  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" />
     <path d="M4 8c0-2 2.5-4 6-4s6 2 6 4" />
   </svg>
 );
 
-const iconX = (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-    <path d="M2 2l8 8M10 2L2 10" />
-  </svg>
-);
-
-const iconBand = (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-    <circle cx="7" cy="7" r="5" />
-    <circle cx="7" cy="7" r="1.5" />
+const iconShield = (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 1.5 13 3.5v4c0 3.5-2.5 5.8-5 7-2.5-1.2-5-3.5-5-7v-4L8 1.5Z" />
+    <path d="M6 7.5l1.5 1.5L10.5 6" />
   </svg>
 );
 
 export default function App() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
-  const [view, setView] = useState<View>("connections");
+  const [view, setView] = useState<"connections" | "explorer">("connections");
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const notifyTimer = useRef<number | undefined>(undefined);
 
-  // Persist settings whenever they change
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
 
-  // On mount, if persistence is on, attempt to re-connect stored channels
   useEffect(() => {
     if (!settings.persistConnections) return;
-
     const stored = loadConnections();
     if (stored.length === 0) return;
-
     let cancelled = false;
     (async () => {
       for (const cfg of stored) {
@@ -63,11 +51,9 @@ export default function App() {
           const result = await api.connect(cfg);
           if (!cancelled) {
             setConnections((prev) => {
-              // avoid duplicate if already added
               if (prev.some((c) => c.id === result.id)) return prev;
               return [...prev, result];
             });
-            notify(`Restored "${result.name}" — ${result.bucketCount} buckets`, "success");
           }
         } catch {
           // stale credentials — silently skip
@@ -75,16 +61,15 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-    // Only run on initial mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const notify = useCallback((message: string, type: "success" | "error") => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
+    window.clearTimeout(notifyTimer.current);
+    notifyTimer.current = window.setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  // Build a lookup map from connection id → stored config so we can remove the right one
   const connToStoredRef = useRef<Map<string, StoredConnection>>(new Map());
 
   const handleConnect = async (config: {
@@ -97,9 +82,7 @@ export default function App() {
       setConnections((prev) => [...prev, result]);
       setActiveConnectionId(result.id);
       setView("explorer");
-      notify(`Connected! Found ${result.bucketCount} buckets.`, "success");
-
-      // Persist to localStorage if enabled
+      notify(`Connected to "${result.name}" — ${result.bucketCount} buckets found.`, "success");
       if (settings.persistConnections) {
         const stored: StoredConnection = {
           name: config.name,
@@ -117,39 +100,36 @@ export default function App() {
     } catch (err) {
       const e = err as S3Error;
       notify(e.error || "Connection failed", "error");
+      throw err;
     }
   };
 
   const handleDisconnect = async (id: string) => {
-    await api.disconnect(id);
-
-    // Remove from localStorage if persisted
+    try { await api.disconnect(id); } catch { /* already gone */ }
     const stored = connToStoredRef.current.get(id);
-    if (stored && settings.persistConnections) {
-      removeStoredConnection(stored);
-    }
+    if (stored && settings.persistConnections) removeStoredConnection(stored);
     connToStoredRef.current.delete(id);
-
     setConnections((prev) => prev.filter((c) => c.id !== id));
     if (activeConnectionId === id) { setActiveConnectionId(null); setView("connections"); }
+    notify("Connection removed.", "success");
   };
 
   const handleTogglePersist = (enabled: boolean) => {
     setSettings((prev) => ({ ...prev, persistConnections: enabled }));
     if (!enabled) {
-      // When turning off, clear stored connections entirely
       clearAllConnections();
       connToStoredRef.current.clear();
     }
   };
 
   const handleSelectConnection = (id: string) => {
-    setActiveConnectionId(id); setView("explorer"); setSidebarOpen(false);
+    setActiveConnectionId(id);
+    setView("explorer");
   };
 
   const handleBack = () => setView("connections");
 
-  const activeConnection = connections.find((c) => c.id === activeConnectionId);
+  const activeConnection = connections.find((c) => c.id === activeConnectionId) ?? null;
 
   return (
     <div className="app">
@@ -157,87 +137,110 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark">{iconBucket}</span>
           <span className="brand-name">S3 Tester</span>
-          <span className="brand-sub">Signal Analysis</span>
+          <span className="brand-tag">Console</span>
         </div>
         <div className="header-actions">
           {view === "explorer" && activeConnection && (
             <>
-              <div className="tuned-readout">
+              <div className="status-pill" title={activeConnection.endpoint || "AWS S3"}>
                 <span className="dot" />
-                <span className="tuned-name">{activeConnection.name}</span>
-                <span className="tuned-sep">&middot;</span>
-                <span className="tuned-endpoint">{activeConnection.endpoint || "s3.amazonaws.com"}</span>
+                <span className="name">{activeConnection.name}</span>
+                <span className="endpoint">{activeConnection.endpoint || "s3.amazonaws.com"}</span>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={handleBack}>&larr; Connections</button>
+              {connections.length > 1 && (
+                <select
+                  className="conn-switcher"
+                  value={activeConnection.id}
+                  onChange={(e) => handleSelectConnection(e.target.value)}
+                  aria-label="Switch connection"
+                >
+                  {connections.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={handleBack}>All connections</button>
             </>
           )}
         </div>
       </header>
 
       {notification && (
-        <div className={`notification notification-${notification.type}`}>
-          {notification.message}
+        <div className={`notification notification-${notification.type}`} role="status">
+          <span className="n-dot" />
+          <span>{notification.message}</span>
         </div>
       )}
 
       <main className="app-main">
-        {view === "connections" ? (
-          <div className="workspace">
-            <aside className={`channel-bank${sidebarOpen ? " open" : ""}`}>
-              <div className="bank-head">
-                <span className="bank-title">Channels</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", color: "var(--ink-4)", fontVariantNumeric: "tabular-nums" }}>{connections.length}</span>
-              </div>
-              <div className="bank-body">
-                {connections.length === 0 && <p className="text-muted">No channels tuned.</p>}
-                {connections.map((c) => (
-                  <button key={c.id} className={`freq-band${c.id === activeConnectionId ? " active" : ""}`} onClick={() => handleSelectConnection(c.id)}>
-                    <div className="freq-top">
-                      <span className="freq-icon">{iconBand}</span>
-                      <span className="freq-name">{c.name}</span>
-                      <span className="freq-del" onClick={(e) => { e.stopPropagation(); handleDisconnect(c.id); }} title="Remove channel">{iconX}</span>
+        {view === "connections" || !activeConnection ? (
+          <div className="dash">
+            <div className="dash-hero">
+              <h1>Connect to object storage</h1>
+              <p>Point at any S3-compatible endpoint, verify credentials, and browse buckets — no install, nothing stored on a server.</p>
+            </div>
+            <div className="dash-grid">
+              <section className="card" aria-label="New connection">
+                <div className="card-head">
+                  <h2>New connection</h2>
+                  <p>Pick a provider to prefill sensible defaults, then enter your keys.</p>
+                </div>
+                <div className="card-body">
+                  <ConnectionForm
+                    onConnect={handleConnect}
+                    persistEnabled={settings.persistConnections}
+                    onTogglePersist={handleTogglePersist}
+                  />
+                </div>
+              </section>
+              <div className="dash-aside">
+                <section className="mini-card" aria-label="Saved connections">
+                  <h3>Saved connections ({connections.length})</h3>
+                  {connections.length === 0 ? (
+                    <p className="empty-mini">Nothing saved yet. Your connections will appear here once you connect.</p>
+                  ) : (
+                    <div className="conn-list" style={{ marginTop: 10 }}>
+                      {connections.map((c) => (
+                        <div key={c.id} className="conn-card">
+                          <div className="conn-card-top">
+                            <span className="name">{c.name}</span>
+                            <span className="count-badge">{c.bucketCount} buckets</span>
+                          </div>
+                          <div className="conn-card-meta">{c.endpoint || "s3.amazonaws.com"} · {c.region}</div>
+                          <div className="conn-card-actions">
+                            <button className="btn btn-outline btn-sm" onClick={() => handleSelectConnection(c.id)}>Open</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => handleDisconnect(c.id)}>Remove</button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="freq-meta">
-                      <span className="val">{c.bucketCount} buckets</span>
-                      <span className="sep">&middot;</span>
-                      <span>{c.endpoint || "AWS S3"}</span>
-                    </div>
-                  </button>
-                ))}
+                  )}
+                </section>
+                <section className="mini-card safety-note" aria-label="Safety note">
+                  <span className="icon">{iconShield}</span>
+                  <div>
+                    <h3>Ephemeral by design</h3>
+                    <p>Connections live in server memory. Restart the server and everything is gone — unless you enable browser storage on the form.</p>
+                  </div>
+                </section>
+                <section className="mini-card" aria-label="How it works">
+                  <h3>What you can do next</h3>
+                  <ol>
+                    <li>Connect with an access key</li>
+                    <li>Pick a bucket from the sidebar</li>
+                    <li>Upload, preview, or share objects</li>
+                  </ol>
+                </section>
               </div>
-              <div className="bank-foot"><span className="panel-label">Calibrate below</span></div>
-            </aside>
-            <div className="bay">
-              <div className="bay-scroll"><div className="bay-narrow">
-                <ConnectionForm
-                  onConnect={handleConnect}
-                  persistEnabled={settings.persistConnections}
-                  onTogglePersist={handleTogglePersist}
-                />
-              </div></div>
             </div>
           </div>
         ) : (
-          <div className="workspace">
-            <aside className="channel-bank">
-              <div className="bank-head"><span className="bank-title">Channels</span></div>
-              <div className="bank-body">
-                {connections.map((c) => (
-                  <button key={c.id} className={`freq-band${c.id === activeConnection!.id ? " active" : ""}`} onClick={() => handleSelectConnection(c.id)}>
-                    <div className="freq-top">
-                      <span className="freq-icon">{iconBand}</span>
-                      <span className="freq-name">{c.name}</span>
-                      <span className="freq-del" onClick={(e) => { e.stopPropagation(); handleDisconnect(c.id); }} title="Remove channel">{iconX}</span>
-                    </div>
-                    <div className="freq-meta"><span className="val">{c.bucketCount} buckets</span></div>
-                  </button>
-                ))}
-              </div>
-            </aside>
-            <div className="bay">
-              <BucketExplorer connectionId={activeConnection!.id} connectionName={activeConnection!.name} onNotify={notify} />
-            </div>
-          </div>
+          <BucketExplorer
+            connectionId={activeConnection.id}
+            connectionName={activeConnection.name}
+            endpoint={activeConnection.endpoint}
+            onNotify={notify}
+          />
         )}
       </main>
     </div>

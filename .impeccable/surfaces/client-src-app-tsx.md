@@ -1,12 +1,5 @@
 ---
 version: 1
-slug: "index"
-primary_target: "index"
-related_targets: []
----
-
----
-version: 1
 slug: "client-src-app-tsx"
 primary_target: "client/src/App.tsx"
 related_targets: []

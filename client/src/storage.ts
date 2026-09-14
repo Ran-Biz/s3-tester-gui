@@ -1,7 +1,9 @@
 /**
  * localStorage persistence for S3 connection configs.
- * Stores sanitized connection details (no secret keys) so users can
- * restore tuned channels across page reloads / browser restarts.
+ * WARNING: when enabled this stores secrets (secretAccessKey, sessionToken)
+ * in plain text in the browser's localStorage. Off by default in spirit —
+ * the toggle on the connect form controls it, and turning it off wipes all
+ * saved connections. Used only to restore connections across reloads.
  */
 
 export interface StoredConnection {

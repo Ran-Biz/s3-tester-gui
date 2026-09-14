@@ -1,38 +1,26 @@
 ---
 name: S3 Tester
-description: A signal-analysis workstation for S3 object storage
+description: A quiet dark console for S3 object storage
 colors:
-  void: "#060913"
-  panel: "#0b1120"
-  panel-2: "#0e1526"
-  panel-3: "#111a2e"
-  line: "#1c2538"
-  line-2: "#2a3550"
-  line-3: "#3a4668"
-  ink: "#dce4f2"
-  ink-2: "#8b9dc3"
-  ink-3: "#75829f"
-  ink-4: "#4a5470"
-  signal: "#4ae54a"
-  signal-2: "#7cf07c"
-  signal-dim: "#2f8f34"
-  tuner: "#e0a92c"
-  tuner-2: "#f0c25c"
-  tuner-dim: "#8f6c1a"
-  alert: "#ff5c6c"
-  alert-2: "#ff8592"
+  bg: "#090B0F"
+  surface: "#10141B"
+  surface-2: "#151A23"
+  inset: "#0B0E14"
+  border: "#222A38"
+  border-strong: "#303A4E"
+  text: "#E8ECF3"
+  text-2: "#A6B0C2"
+  text-3: "#6B7689"
+  accent: "#5B8CFF"
+  accent-hover: "#739DFF"
+  success: "#3FB96B"
+  danger: "#E5484D"
 typography:
   ui:
-    fontFamily: "Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.5
-  ui-label:
-    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
-    fontSize: "0.6875rem"
-    fontWeight: 500
-    letterSpacing: "0.1em"
-    textTransform: uppercase
   data:
     fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: "0.8125rem"
@@ -40,137 +28,133 @@ typography:
     lineHeight: 1.5
     fontVariantNumeric: tabular-nums
 rounded:
-  r-1: "2px"
-  r-2: "4px"
-  r-3: "6px"
+  r-sm: "6px"
+  r-md: "10px"
+  r-lg: "14px"
 spacing:
-  u: "4px"
+  card-pad: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.tuner}"
-    textColor: "{colors.void}"
-    rounded: "{rounded.r-2}"
-    padding: "10px 16px"
+    backgroundColor: "{colors.accent}"
+    textColor: "#FFFFFF"
+    rounded: "{rounded.r-sm}"
+    padding: "12px 20px"
   button-outline:
-    backgroundColor: "{colors.panel-2}"
-    textColor: "{colors.ink-2}"
-    rounded: "{rounded.r-2}"
+    backgroundColor: "{colors.surface-2}"
+    textColor: "{colors.text-2}"
+    rounded: "{rounded.r-sm}"
     padding: "10px 16px"
   input:
-    backgroundColor: "{colors.void}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.r-2}"
+    backgroundColor: "{colors.inset}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.r-sm}"
     padding: "10px 12px"
-  panel:
-    backgroundColor: "{colors.panel}"
-    rounded: "{rounded.r-3}"
+  card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.r-lg}"
 ---
 
 ## Overview
 
-**Signal Analysis** is a deep-space-vacuum design system for developer tools. It treats the interface as a scientific instrument: every element is a reading, every interaction is a measurement. The ground is the deepest void (`#060913`). Two instrument channels carry information: **phosphor green** for data, measurements, paths, and code; **tuner amber** for operations, selections, and primary actions. The system refuses decoration. If it does not convey state, navigation, or data, it does not render.
+**Quiet Console** is a minimal dark console for developer tools. It treats the interface as a calm workspace: plain language, stepped sections, and progressive disclosure. The ground is a neutral near-black (`#090B0F`). Cards lift one step (`#10141B`) with hairline borders (`#222A38`). One blue accent (`#5B8CFF`) owns primary actions and selection; green is reserved for connected status, red for danger. Nothing else competes for attention.
 
-Born from the radio astronomy / Deep Space Network control room direction. Mode: Operate.
+Replaces the former Signal Analysis instrument world. Mode: Operate.
 
 ## Colors
 
-The palette is split into three layers:
+Three layers, one accent:
 
-- **Void & Surfaces** — the deep field (`--void`, `--panel`, `--panel-2`, `--panel-3`). Each step is a slightly lifted navy-black. The void is the ground; panels are instrument housings. Never use pure black.
-- **Rules** — `--line` through `--line-3`. Hairlines at increasing opacity. Used for borders, dividers, table rules, and the faint grid on measurement surfaces.
-- **Ink** — `--ink` through `--ink-4`. Readout text at four levels. The brightest (`#dce4f2`) is reserved for primary content; `--ink-4` (`#4a5470`) is the quietest before complete darkness.
+- **Ground & surfaces** — `--bg`, `--surface`, `--surface-2`, `--inset`. Neutral slate, no blue cast. Cards sit on the ground with a hairline border; inputs recess into `--inset`.
+- **Borders** — `--border`, `--border-strong`. Hairlines for structure, stronger for hover and focus containers.
+- **Text** — `--text` through `--text-4`. Primary content brightest; `--text-4` is the quietest permitted value.
 
-Two **signal channels** carry the meaning:
+Semantic roles:
 
-- **Signal** (`--signal`, `--signal-2`, `--signal-dim`) — phosphor green. Data, file paths, sizes, keys, timestamps, folders. The spectrogram channel. Backgrounds use `--signal-bg` (`rgba(74,229,74,0.08)`); borders use `--signal-line` (`rgba(74,229,74,0.32)`).
-- **Tuner** (`--tuner`, `--tuner-2`, `--tuner-dim`) — amber. Primary actions, active selection, connection indicators. The operator channel. Backgrounds use `--tuner-bg` (`rgba(224,169,44,0.09)`); borders use `--tuner-line` (`rgba(224,169,44,0.36)`).
-- **Alert** (`--alert`, `--alert-2`) — red for destructive actions and errors.
+- **Accent** (`--accent`, `--accent-hover`, `--accent-active`) — blue. Primary buttons, selected bucket, selected rows, links, focus rings. Backgrounds use `--accent-bg`; borders use `--accent-line`.
+- **Success** (`--success`) — green. Connected dot and success notifications only.
+- **Danger** (`--danger`, `--danger-hover`) — red. Destructive actions and errors.
 
-**Strategy: Restrained.** One accent carries 5-15% of any screen. The signal channel owns data; the tuner channel owns action. Colors never appear as decoration — only on actionable or informative elements.
+**Strategy: Restrained.** Blue carries primary action and selection; it never decorates. Status colors appear only on status.
 
 ## Typography
 
-Two families, one role each:
+- **Inter system stack** — all interface text: headings, labels, buttons, body, descriptions. Tight tracking (-0.01 to -0.02em) on headings.
+- **JetBrains Mono** — machine values only: object keys, sizes, endpoints, URLs, bucket names in headers. Self-hosted as woff2.
 
-- **Archivo** (variable, 100-900 weight, 100% stretch) — the UI face. Proportional. Labels, headings, button text, body copy, descriptions. Self-hosted as woff2.
-- **JetBrains Mono** (variable, 100-800 weight) — the data face. Monospaced. File paths, keys, sizes, IDs, timestamps, form inputs, presigned URLs, toolbars. Self-hosted as woff2.
+**Scale:** Fixed rem. `--fs-xs` (12px) through `--fs-xl` (22px). Section titles 13px semibold with muted descriptions; table headers 11px caps.
 
-**Scale:** Fixed rem, not fluid. Steps: `--fs-micro` (11px, labels), `--fs-xs` (12px, side text), `--fs-sm` (13px, body), `--fs-base` (14px, default), `--fs-md` (16px, headings), `--fs-lg` (20px), `--fs-xl` (24px). Ratio between steps is ~1.13-1.17.
-
-**Rules:** Monospace for anything machine-generated or measured. Proportional UI for anything human-authored. Tabular-nums on all data cells. Caps with 0.1-0.16em letter-spacing for section labels and table headers. No display sizes needed — this is a tool, not a publication.
+**Rules:** Sentence case everywhere except table headers. Mono never used for prose or labels.
 
 ## Layout
 
-- **4px grid.** Every measurement is a multiple of `--u` (4px). Buttons, inputs, spacings, radii all derive from `calc(var(--u) * N)`.
-- **Workspace:** Two-panel layout. Left: channel bank (264px, connections). Right: main bay (flex fill).
-- **Header:** 52px tall, sticky, instrument ID plate.
-- **Explorer:** Two-panel layout. Left: bucket sidebar (248px). Right: toolbar + data table.
-- **Responsive:** At ≤900px the channel bank/sidebar collapses to a fixed overlay. At ≤640px field rows go single-column, the last-modified column hides.
-- **Breakpoints:** 900px (sidebar collapse), 640px (compact).
-- **Max content width:** 860px centered in the calibration view.
+- **Connections:** centered 1120px dashboard. Form card (flex) + 320px aside (saved connections, safety note, next-steps).
+- **Explorer:** 264px buckets sidebar (search, count, New bucket) + main column (bucket header block, breadcrumb + filter row, table card).
+- **Header:** 56px, status pill for the active connection, connection switcher when 2+ connections.
+- **Responsive:** ≤1024px the dashboard stacks; ≤900px the explorer stacks with a capped sidebar; ≤640px single-column fields, hidden Modified column.
 
 ## Elevation & Depth
 
-Flat layering. No shadows. Depth is conveyed through background tint steps: `--void` → `--panel` → `--panel-2` → `--panel-3`. Modals add a single dark overlay with slight backdrop blur. The toolbar sits on `--panel`, the table header on `--panel-2`, both above the void content area. No box-shadows anywhere except the modal and notification, which are chromium shadows for separation from the instrument surface.
+Flat. Depth comes from ground → card → inset steps plus hairline borders. No shadows except modals and notifications.
 
 ## Shapes
 
-- **Corners:** Tight instrument radii. `--r-1` (2px) for subtle rules, `--r-2` (4px) for buttons/inputs, `--r-3` (6px) for panels and modals.
-- **Focus rings:** 1.5px solid `--tuner` with 2px offset on `:focus-visible`. No glow, no spread.
-- **Selection:** `::selection` in `--tuner-line` (semi-transparent amber) with white text.
-- **Scrollbars:** Thin, themed. `--line-2` thumb on transparent track.
+- **Corners:** `--r-sm` (6px) inputs and small buttons, `--r-md` (10px) cards and table wraps, `--r-lg` (14px) top-level cards and modals.
+- **Focus rings:** 2px solid `--accent` with soft outer glow on inputs.
+- **Selection:** translucent blue with white text.
+- **Scrollbars:** thin, `--border-strong` thumb on transparent track.
 
 ## Components
 
 ### Buttons (`.btn`)
 
-| Variant | Background | Text | Border | Hover |
-|---|---|---|---|---|
-| Primary | `--tuner` | `--void` | `--tuner` | `--tuner-2` |
-| Outline | `--panel-2` | `--ink-2` | `--line-2` | bg→`--panel-3`, text→`--ink` |
-| Ghost | transparent | `--ink-3` | transparent | bg→`--panel-2`, text→`--ink` |
-| Danger | `--alert-bg` | `--alert-2` | `--alert-line` | bg deepened |
-| Danger solid | `--alert` | white | `--alert` | `--alert-2` |
+| Variant | Background | Text | Border |
+|---|---|---|---|
+| Primary | `--accent` | white | `--accent` |
+| Outline | `--surface-2` | `--text-2` | `--border` |
+| Ghost | transparent | `--text-2` | transparent |
+| Danger | `--danger-bg` | `#f27b7f` | `--danger-line` |
 
-Sizes: `--btn-sm` (8px 12px), default (10px 16px), `--btn-lg` (12px 20px). Icon buttons are 28×28px grid cells with a transparent-to-panel hover transition. Disabled: 40% opacity, no pointer.
+Sizes: sm (7px 12px), default (10px 16px), lg (12px 20px). Icon buttons 30×30px.
 
 ### Inputs (`.input`)
 
-Mono font, void background, line-2 border. Hover lightens border to line-3. Focus: tuner border, tuner-bg shadow ring, panel-2 background. Placeholder: ink-3 at 75% opacity.
+Inset background, hairline border. Hover strengthens border. Focus: accent border + soft ring. `.mono` variant for machine values. Search variants with left icon.
 
-### Radio cards (`.radio-card`)
+### Stepped form (`.form-section`)
 
-Void background, line border. Checked state: signal-line border, signal-bg background. Custom radio dot rendered in CSS. Two cards with name + description.
+Numbered steps (Provider → Endpoint → Credentials) with title + description. Advanced settings collapsed in `<details>`. Presets are a 2-column grid of name + description buttons.
 
-### Panels (`.panel`)
+### Cards (`.card`, `.mini-card`, `.conn-card`)
 
-Panel background, line-2 border, r-3 radius. Head: panel-2 background, bottom rule, title in signal icon + UI font. Body: 20px padding.
+Card: surface, hairline border, 14px radius, 20–24px padding. Saved connections are compact cards with name, bucket count badge, endpoint meta, Open/Remove actions.
 
-### Data table (`.object-table`)
+### Bucket sidebar
 
-Full-width, collapsed borders. Sticky header in panel-2 with mono caps labels. Rows bordered by line. Hover: panel background. Selected: signal-bg background. Checkboxes are custom 15px signal-colored squares.
+Search field, count in the title, hover-reveal delete. Active bucket: accent tint + accent border.
+
+### Bucket header (`.bucket-head`)
+
+Mono bucket name, meta line (object count · endpoint · prefix), Upload / New folder actions top-right.
+
+### Object table (`.object-table`)
+
+Sticky header in `--surface-2` with 11px caps labels. Row-hover reveals actions (preview, download, share, delete). Selected rows get accent tint. Bulk bar appears above the table when files are selected.
 
 ### Modals (`.modal`)
 
-Fixed overlay with dark backdrop + 2px blur. Panel housing, 440px max-width (640px wide variant). Modal-in animation: 8px rise + 0.99→1 scale, 180ms ease.
+Centered overlay with blur. Title + plain-language description + labeled field. 460px default, 620px wide variant.
 
 ### Notifications
 
-Fixed, centered below header. Mono font, backdrop-blur. Success: signal-tinted; error: alert-tinted.
-
-### Channel bank (`.channel-bank`)
-
-264px sidebar. Frequency bands: transparent by default, panel-2 on hover, tuner-bg + tuner-line border + left tuner accent bar when active. Delete button fades in on hover.
+Top-center pills with status dot. Green-tinted success, red-tinted error.
 
 ## Do's and Don'ts
 
-- **Do** use mono for file paths, keys, sizes, IDs, timestamps, form inputs.
-- **Do** use the signal channel (green) for data, measurements, and file references.
-- **Do** use the tuner channel (amber) for actions, selections, and connections.
-- **Do** snap every measurement to the 4px grid.
-- **Don't** use pure black — the void (`#060913`) is the darkest permitted value.
-- **Don't** add box shadows outside modals and notifications.
-- **Don't** use emoji for icons — use drawn SVG at 1.5px stroke weight.
-- **Don't** introduce a third accent color. Signal + tuner is the complete vocabulary.
-- **Don't** animate page-load entrances. Motion is for state transitions (hover, focus, modal in/out), not choreography.
-- **Don't** use gradient text, glass/blur as decoration, or colored left-borders on cards.
+- **Do** use plain product language: Connections, Buckets, Objects, Share.
+- **Do** collapse advanced settings (session token, path style, checksums, persistence) behind a disclosure.
+- **Do** reveal row actions on hover; keep tables scannable.
+- **Do** use mono only for machine values.
+- **Don't** use uppercase micro-labels outside table headers.
+- **Don't** use green/amber as decoration — green means connected/success, blue means action/selection.
+- **Don't** use emoji for icons — drawn SVG at 1.5px stroke.
+- **Don't** add shadows outside modals and notifications.
