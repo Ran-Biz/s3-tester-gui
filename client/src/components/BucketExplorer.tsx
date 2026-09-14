@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "../api";
+import MiniBlog from "./MiniBlog";
 import type { BucketInfo, S3Object, DownloadResult } from "../types";
 
 interface Props {
@@ -100,6 +101,7 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
     | { kind: "bulk"; count: number }
     | null
   >(null);
+  const [activeTab, setActiveTab] = useState<"objects" | "blog">("objects");
 
   const loadBuckets = useCallback(async () => {
     setLoadingBuckets(true);
@@ -119,7 +121,7 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
 
   const handleSelectBucket = (b: string) => {
     setSelectedBucket(b); setCurrentPrefix(""); setPrefixStack([]);
-    setSelectedItems(new Set()); setObjectFilter(""); loadObjects(b, "");
+    setSelectedItems(new Set()); setObjectFilter(""); setActiveTab("objects"); loadObjects(b, "");
   };
   const handleNavigateToFolder = (p: string) => {
     setPrefixStack((prev) => [...prev, currentPrefix]); setCurrentPrefix(p);
@@ -340,6 +342,35 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
               </div>
             </div>
 
+            <div className="view-tabs" role="tablist" aria-label="Bucket views">
+              <button
+                role="tab"
+                aria-selected={activeTab === "objects"}
+                className={`view-tab${activeTab === "objects" ? " active" : ""}`}
+                onClick={() => setActiveTab("objects")}
+              >
+                Objects
+              </button>
+              <button
+                role="tab"
+                aria-selected={activeTab === "blog"}
+                className={`view-tab${activeTab === "blog" ? " active" : ""}`}
+                onClick={() => setActiveTab("blog")}
+              >
+                Mini blog
+                <span className="view-tab-badge">real-world test</span>
+              </button>
+            </div>
+
+            {activeTab === "blog" ? (
+              <MiniBlog
+                connectionId={connectionId}
+                bucketName={selectedBucket}
+                endpoint={endpoint}
+                onNotify={onNotify}
+              />
+            ) : (
+            <>
             <div className="toolbar-row">
               <nav className="breadcrumb" aria-label="Path">
                 <button className={`crumb${!currentPrefix ? " current" : ""}`} onClick={handleCrumbRoot} disabled={!currentPrefix}>
@@ -464,6 +495,8 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
                 )}
               </div>
             </div>
+            </>
+            )}
           </>
         )}
       </section>
