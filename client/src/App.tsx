@@ -20,10 +20,21 @@ const iconBucket = (
   </svg>
 );
 
-const iconShield = (
-  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 1.5 13 3.5v4c0 3.5-2.5 5.8-5 7-2.5-1.2-5-3.5-5-7v-4L8 1.5Z" />
-    <path d="M6 7.5l1.5 1.5L10.5 6" />
+const iconPlus = (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <path d="M7 2v10M2 7h10" />
+  </svg>
+);
+
+const iconX = (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <path d="M3 3l8 8M11 3L3 11" />
+  </svg>
+);
+
+const iconArrow = (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 7h9M8 3.5 11.5 7 8 10.5" />
   </svg>
 );
 
@@ -33,6 +44,7 @@ export default function App() {
   const [view, setView] = useState<"connections" | "explorer">("connections");
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [showAddForm, setShowAddForm] = useState(false);
   const notifyTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -82,6 +94,7 @@ export default function App() {
       setConnections((prev) => [...prev, result]);
       setActiveConnectionId(result.id);
       setView("explorer");
+      setShowAddForm(false);
       notify(`Connected to "${result.name}" — ${result.bucketCount} buckets found.`, "success");
       if (settings.persistConnections) {
         const stored: StoredConnection = {
@@ -129,6 +142,13 @@ export default function App() {
 
   const handleBack = () => setView("connections");
 
+  useEffect(() => {
+    if (!showAddForm) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowAddForm(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAddForm]);
+
   const activeConnection = connections.find((c) => c.id === activeConnectionId) ?? null;
 
   return (
@@ -174,65 +194,60 @@ export default function App() {
 
       <main className="app-main">
         {view === "connections" || !activeConnection ? (
-          <div className="dash">
-            <div className="dash-hero">
-              <h1>Connect to object storage</h1>
-              <p>Point at any S3-compatible endpoint, verify credentials, and browse buckets — no install, nothing stored on a server.</p>
-            </div>
-            <div className="dash-grid">
-              <section className="card" aria-label="New connection">
-                <div className="card-head">
-                  <h2>New connection</h2>
-                  <p>Pick a provider to prefill sensible defaults, then enter your keys.</p>
-                </div>
-                <div className="card-body">
-                  <ConnectionForm
-                    onConnect={handleConnect}
-                    persistEnabled={settings.persistConnections}
-                    onTogglePersist={handleTogglePersist}
-                  />
-                </div>
-              </section>
-              <div className="dash-aside">
-                <section className="mini-card" aria-label="Saved connections">
-                  <h3>Saved connections ({connections.length})</h3>
-                  {connections.length === 0 ? (
-                    <p className="empty-mini">Nothing saved yet. Your connections will appear here once you connect.</p>
-                  ) : (
-                    <div className="conn-list" style={{ marginTop: 10 }}>
-                      {connections.map((c) => (
-                        <div key={c.id} className="conn-card">
-                          <div className="conn-card-top">
-                            <span className="name">{c.name}</span>
-                            <span className="count-badge">{c.bucketCount} buckets</span>
-                          </div>
-                          <div className="conn-card-meta">{c.endpoint || "s3.amazonaws.com"} · {c.region}</div>
-                          <div className="conn-card-actions">
-                            <button className="btn btn-outline btn-sm" onClick={() => handleSelectConnection(c.id)}>Open</button>
-                            <button className="btn btn-ghost btn-sm" onClick={() => handleDisconnect(c.id)}>Remove</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-                <section className="mini-card safety-note" aria-label="Safety note">
-                  <span className="icon">{iconShield}</span>
-                  <div>
-                    <h3>Ephemeral by design</h3>
-                    <p>Connections live in server memory. Restart the server and everything is gone — unless you enable browser storage on the form.</p>
-                  </div>
-                </section>
-                <section className="mini-card" aria-label="How it works">
-                  <h3>What you can do next</h3>
-                  <ol>
-                    <li>Connect with an access key</li>
-                    <li>Pick a bucket from the sidebar</li>
-                    <li>Upload, preview, or share objects</li>
-                  </ol>
-                </section>
+          <div className="dash dash-home">
+            <div className="dash-hero home-hero">
+              <div>
+                <h1>Connections</h1>
+                <p>Pick a saved connection to browse, or add a new one. Connections live in server memory — restart the server and they're gone, unless you enable browser storage when adding.</p>
               </div>
+              <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>{iconPlus} Add connection</button>
             </div>
+            {connections.length === 0 ? (
+              <div className="card home-empty">
+                <div className="card-body home-empty-body">
+                  <span className="empty-icon">{iconBucket}</span>
+                  <h2>No connections yet</h2>
+                  <p>Add your first connection to start browsing buckets. It takes under 30 seconds.</p>
+                  <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>{iconPlus} Add connection</button>
+                </div>
+              </div>
+            ) : (
+              <div className="home-list" role="list" aria-label="Saved connections">
+                {connections.map((c) => (
+                  <div key={c.id} className="card home-conn" role="listitem">
+                    <button className="home-conn-main" onClick={() => handleSelectConnection(c.id)} aria-label={`Open ${c.name}`}>
+                      <span className="home-conn-icon">{iconBucket}</span>
+                      <span className="home-conn-text">
+                        <span className="home-conn-name">{c.name}</span>
+                        <span className="home-conn-meta">{c.endpoint || "s3.amazonaws.com"} · {c.region} · {c.bucketCount} bucket{c.bucketCount === 1 ? "" : "s"}</span>
+                      </span>
+                      <span className="home-conn-open">{iconArrow}<span>Open</span></span>
+                    </button>
+                    <button className="btn btn-ghost btn-sm home-conn-remove" onClick={() => handleDisconnect(c.id)} aria-label={`Remove ${c.name}`}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {showAddForm && (
+              <div className="sheet-overlay" onClick={() => setShowAddForm(false)}>
+                <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add connection">
+                  <div className="sheet-head">
+                    <div>
+                      <h2>New connection</h2>
+                      <p>Pick a provider to prefill defaults, then enter your keys.</p>
+                    </div>
+                    <button className="btn-icon" onClick={() => setShowAddForm(false)} aria-label="Close">{iconX}</button>
+                  </div>
+                  <div className="sheet-body">
+                    <ConnectionForm
+                      onConnect={handleConnect}
+                      persistEnabled={settings.persistConnections}
+                      onTogglePersist={handleTogglePersist}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <BucketExplorer
