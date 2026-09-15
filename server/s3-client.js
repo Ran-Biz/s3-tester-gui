@@ -36,4 +36,39 @@ function createS3Client(config) {
   return new S3Client(clientConfig);
 }
 
-module.exports = { createS3Client };
+/**
+ * Split a user-supplied endpoint that may include a bucket path segment
+ * (e.g. "https://<account>.r2.cloudflarestorage.com/my-bucket") into a clean
+ * base endpoint plus a bucket hint. R2 users often paste the bucket URL
+ * directly, which breaks signing/listing if used verbatim.
+ *
+ * Returns { endpoint, bucketFromPath }.
+ */
+function splitEndpointAndBucket(rawEndpoint, explicitBucket) {
+  const explicit = (explicitBucket || "").trim();
+  let endpoint = (rawEndpoint || "").trim().replace(/\/+$/, "");
+  if (!endpoint) return { endpoint: "", bucketFromPath: explicit };
+
+  let withScheme = endpoint;
+  if (!/^https?:\/\//i.test(withScheme)) withScheme = `https://${withScheme}`;
+
+  let url;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    // Not a parseable URL — leave as-is, validation happens later.
+    return { endpoint, bucketFromPath: explicit };
+  }
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length === 0) {
+    return { endpoint: url.origin, bucketFromPath: explicit };
+  }
+
+  // Endpoint has a path — treat the last segment as the bucket name
+  // (covers "r2url/mybuck" and deeper custom-domain paths).
+  const fromPath = decodeURIComponent(parts[parts.length - 1]);
+  return { endpoint: url.origin, bucketFromPath: explicit || fromPath };
+}
+
+module.exports = { createS3Client, splitEndpointAndBucket };

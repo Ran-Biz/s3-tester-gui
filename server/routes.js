@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const { S3Client, ListBucketsCommand, CreateBucketCommand, DeleteBucketCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, HeadBucketCommand, GetBucketLocationCommand, GetBucketAclCommand, PutBucketAclCommand } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const { createS3Client } = require("./s3-client");
+const { createS3Client, splitEndpointAndBucket } = require("./s3-client");
 const stream = require("stream");
 
 const router = express.Router();
@@ -15,41 +15,152 @@ function getClient(req, connectionId) {
   return conn.client;
 }
 
+function getConn(req, connectionId) {
+  const conn = req.connections.get(connectionId);
+  if (!conn) throw new Error("Connection not found");
+  return conn;
+}
+
+// Verify a single bucket is reachable (for R2 tokens scoped to one bucket
+// where ListBuckets returns empty or AccessDenied).
+async function verifyBucket(client, bucketName) {
+  await client.send(new HeadBucketCommand({ Bucket: bucketName }));
+}
+
+// List buckets, merging in the hinted single bucket when ListBuckets
+// comes back empty (common for R2 single-bucket API tokens).
+async function listBucketsWithFallback(client, bucketHint) {
+  let buckets = [];
+  let listError = null;
+  try {
+    const result = await client.send(new ListBucketsCommand({}));
+    buckets = result.Buckets?.map((b) => ({ name: b.Name, created: b.CreationDate })) || [];
+  } catch (err) {
+    listError = err;
+  }
+
+  let defaultBucket = "";
+  if (bucketHint) {
+    const alreadyListed = buckets.some((b) => b.name === bucketHint);
+    if (!alreadyListed) {
+      try {
+        await verifyBucket(client, bucketHint);
+        buckets = [{ name: bucketHint }, ...buckets];
+        defaultBucket = bucketHint;
+      } catch (verifyErr) {
+        // If listing also failed, surface the more useful error.
+        if (buckets.length === 0 && listError) throw listError;
+        // Otherwise keep whatever ListBuckets returned; the hint is
+        // unreachable (wrong name or no permission).
+        if (buckets.length === 0) throw verifyErr;
+      }
+    } else {
+      defaultBucket = bucketHint;
+    }
+  } else if (buckets.length === 0 && listError) {
+    throw listError;
+  }
+
+  // If listing succeeded but is empty and there is no hint, that's a valid
+  // (empty) account — not an error.
+  if (!defaultBucket && buckets.length === 1 && bucketHint) defaultBucket = bucketHint;
+  return { buckets, defaultBucket };
+}
+
+function validateEndpoint(rawEndpoint) {
+  const trimmed = (rawEndpoint || "").trim();
+  if (!trimmed) return ""; // empty = AWS S3, always valid
+  let withScheme = trimmed;
+  if (!/^https?:\/\//i.test(withScheme)) withScheme = `https://${withScheme}`;
+  let url;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    const err = new Error(
+      "Endpoint doesn't look like a valid URL. Use the base endpoint (e.g. https://<account>.r2.cloudflarestorage.com) — a trailing /bucket-name is stripped automatically."
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!/^https?:$/.test(url.protocol)) {
+    const err = new Error(
+      "Endpoint doesn't look like a valid URL. Use the base endpoint (e.g. https://<account>.r2.cloudflarestorage.com) — a trailing /bucket-name is stripped automatically."
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  const host = url.hostname;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  const isIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":");
+  if (!isLocalhost && !isIP && !host.includes(".")) {
+    const err = new Error(
+      "Endpoint doesn't look like a valid URL. Use the base endpoint (e.g. https://<account>.r2.cloudflarestorage.com) — a trailing /bucket-name is stripped automatically."
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  return withScheme.replace(/\/+$/, "");
+}
+
 // ==================== CONNECTION MANAGEMENT ====================
 
 // Test & save a connection
 router.post("/connect", async (req, res) => {
   try {
+    const rawEndpoint = req.body.endpoint || "";
+    const explicitBucket = (req.body.bucketName || req.body.bucket || "").trim();
+
+    if (!req.body.accessKeyId || !req.body.secretAccessKey) {
+      return res.status(400).json({ error: "Access Key ID and Secret Access Key are required" });
+    }
+
+    // Allow pasting "https://<account>.r2.cloudflarestorage.com/my-bucket":
+    // strip the bucket segment for signing, keep it as a hint.
+    const { endpoint: endpointBase, bucketFromPath } = splitEndpointAndBucket(rawEndpoint, explicitBucket);
+    let endpoint = "";
+    try {
+      endpoint = endpointBase ? validateEndpoint(endpointBase) : "";
+    } catch (validationErr) {
+      return res.status(validationErr.statusCode || 400).json({ error: validationErr.message });
+    }
+    const bucketName = bucketFromPath;
+
     const config = {
-      name: req.body.name || "Unnamed",
-      endpoint: req.body.endpoint || "",
+      name: req.body.name || bucketName || endpoint || "Unnamed",
+      endpoint,
       region: req.body.region || "us-east-1",
       accessKeyId: req.body.accessKeyId,
       secretAccessKey: req.body.secretAccessKey,
       sessionToken: req.body.sessionToken || "",
       forcePathStyle: req.body.forcePathStyle !== false,
       checksumMode: req.body.checksumMode || "compatible",
+      bucketName,
     };
-
-    if (!config.accessKeyId || !config.secretAccessKey) {
-      return res.status(400).json({ error: "Access Key ID and Secret Access Key are required" });
-    }
 
     const client = createS3Client(config);
     const id = uuidv4();
 
-    // Verify connection by listing buckets
-    const result = await client.send(new ListBucketsCommand({}));
+    // Verify connection: ListBuckets, falling back to HeadBucket on the
+    // hinted bucket (R2 single-bucket tokens can't list).
+    let buckets = [];
+    let defaultBucket = "";
+    try {
+      ({ buckets, defaultBucket } = await listBucketsWithFallback(client, bucketName));
+    } catch (err) {
+      return res.status(500).json({ error: err.message, code: err.Code || err.name });
+    }
 
-    req.connections.set(id, { config, client, createdAt: new Date().toISOString() });
+    req.connections.set(id, { config, client, createdAt: new Date().toISOString(), defaultBucket });
 
     res.json({
       id,
       name: config.name,
       endpoint: config.endpoint,
       region: config.region,
-      buckets: result.Buckets?.map((b) => b.Name) || [],
-      bucketCount: result.Buckets?.length || 0,
+      buckets: buckets.map((b) => b.name),
+      bucketCount: buckets.length,
+      defaultBucket,
+      bucketName,
     });
   } catch (err) {
     res.status(500).json({ error: err.message, code: err.Code || err.name });
@@ -65,6 +176,8 @@ router.get("/connections", (req, res) => {
       name: conn.config.name,
       endpoint: conn.config.endpoint,
       region: conn.config.region,
+      bucketName: conn.config.bucketName || "",
+      defaultBucket: conn.defaultBucket || "",
       createdAt: conn.createdAt,
     });
   }
@@ -83,12 +196,17 @@ router.post("/connections/:id/test", async (req, res) => {
     const conn = req.connections.get(req.params.id);
     if (!conn) return res.status(404).json({ error: "Connection not found" });
 
-    const result = await conn.client.send(new ListBucketsCommand({}));
+    const { buckets, defaultBucket } = await listBucketsWithFallback(
+      conn.client,
+      conn.config.bucketName || conn.defaultBucket || ""
+    );
+    conn.defaultBucket = defaultBucket || conn.defaultBucket;
 
     res.json({
       id: req.params.id,
-      buckets: result.Buckets?.map((b) => b.Name) || [],
-      bucketCount: result.Buckets?.length || 0,
+      buckets: buckets.map((b) => b.name),
+      bucketCount: buckets.length,
+      defaultBucket: conn.defaultBucket || "",
     });
   } catch (err) {
     res.status(500).json({ error: err.message, code: err.Code || err.name });
@@ -100,10 +218,15 @@ router.post("/connections/:id/test", async (req, res) => {
 // List buckets
 router.get("/buckets/:connectionId", async (req, res) => {
   try {
-    const client = getClient(req, req.params.connectionId);
-    const result = await client.send(new ListBucketsCommand({}));
+    const conn = getConn(req, req.params.connectionId);
+    const { buckets, defaultBucket } = await listBucketsWithFallback(
+      conn.client,
+      conn.config.bucketName || conn.defaultBucket || ""
+    );
+    if (defaultBucket) conn.defaultBucket = defaultBucket;
     res.json({
-      buckets: result.Buckets?.map((b) => ({ name: b.Name, created: b.CreationDate })) || [],
+      buckets,
+      defaultBucket: conn.defaultBucket || "",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

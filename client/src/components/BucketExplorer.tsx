@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api } from "../api";
 import MiniBlog from "./MiniBlog";
 import type { BucketInfo, S3Object, DownloadResult } from "../types";
@@ -7,6 +7,7 @@ interface Props {
   connectionId: string;
   connectionName: string;
   endpoint?: string;
+  initialBucket?: string;
   onNotify: (message: string, type: "success" | "error") => void;
 }
 
@@ -76,7 +77,7 @@ const iconEmpty = (
   </svg>
 );
 
-export default function BucketExplorer({ connectionId, connectionName, endpoint, onNotify }: Props) {
+export default function BucketExplorer({ connectionId, connectionName, endpoint, initialBucket, onNotify }: Props) {
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -102,15 +103,8 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
     | null
   >(null);
   const [activeTab, setActiveTab] = useState<"objects" | "blog">("objects");
-
-  const loadBuckets = useCallback(async () => {
-    setLoadingBuckets(true);
-    try { const data = await api.listBuckets(connectionId); setBuckets(data.buckets); }
-    catch (err: any) { onNotify(err.error || "Failed to list buckets", "error"); }
-    setLoadingBuckets(false);
-  }, [connectionId, onNotify]);
-
-  useEffect(() => { loadBuckets(); }, [loadBuckets]);
+  const selectedBucketRef = useRef<string | null>(null);
+  selectedBucketRef.current = selectedBucket;
 
   const loadObjects = useCallback(async (bucket: string, prefix: string) => {
     setLoadingObjects(true);
@@ -119,10 +113,36 @@ export default function BucketExplorer({ connectionId, connectionName, endpoint,
     setLoadingObjects(false);
   }, [connectionId, onNotify]);
 
-  const handleSelectBucket = (b: string) => {
+  const handleSelectBucket = useCallback((b: string) => {
     setSelectedBucket(b); setCurrentPrefix(""); setPrefixStack([]);
     setSelectedItems(new Set()); setObjectFilter(""); setActiveTab("objects"); loadObjects(b, "");
-  };
+  }, [loadObjects]);
+
+  const loadBuckets = useCallback(async () => {
+    setLoadingBuckets(true);
+    try {
+      const data = await api.listBuckets(connectionId);
+      setBuckets(data.buckets);
+      // Single-bucket connections (e.g. R2 scoped tokens): open the bucket
+      // directly so the user isn't stuck on an empty list.
+      const hinted = data.defaultBucket || initialBucket || "";
+      if (hinted && !selectedBucketRef.current) {
+        handleSelectBucket(hinted);
+      }
+    }
+    catch (err: any) {
+      // If listing fails entirely but we have a bucket hint, try opening it
+      // directly — the token may lack ListBuckets permission.
+      if (initialBucket && !selectedBucketRef.current) {
+        handleSelectBucket(initialBucket);
+      } else {
+        onNotify(err.error || "Failed to list buckets", "error");
+      }
+    }
+    setLoadingBuckets(false);
+  }, [connectionId, initialBucket, onNotify, handleSelectBucket]);
+
+  useEffect(() => { loadBuckets(); }, [loadBuckets]);
   const handleNavigateToFolder = (p: string) => {
     setPrefixStack((prev) => [...prev, currentPrefix]); setCurrentPrefix(p);
     setSelectedItems(new Set()); setObjectFilter("");

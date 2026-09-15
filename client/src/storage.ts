@@ -15,6 +15,7 @@ export interface StoredConnection {
   sessionToken?: string;
   forcePathStyle: boolean;
   checksumMode?: string;
+  bucketName?: string;
 }
 
 const STORAGE_KEY_CONNECTIONS = "s3-tester:connections";
@@ -89,7 +90,8 @@ export function upsertConnection(config: StoredConnection): void {
       c.name === config.name &&
       c.endpoint === config.endpoint &&
       c.region === config.region &&
-      c.accessKeyId === config.accessKeyId
+      c.accessKeyId === config.accessKeyId &&
+      (c.bucketName || "") === (config.bucketName || "")
   );
   if (idx >= 0) {
     existing[idx] = config;
@@ -107,7 +109,8 @@ export function removeConnection(config: StoredConnection): void {
         c.name === config.name &&
         c.endpoint === config.endpoint &&
         c.region === config.region &&
-        c.accessKeyId === config.accessKeyId
+        c.accessKeyId === config.accessKeyId &&
+        (c.bucketName || "") === (config.bucketName || "")
       )
   );
   saveConnections(filtered);

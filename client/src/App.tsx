@@ -87,7 +87,7 @@ export default function App() {
   const handleConnect = async (config: {
     name: string; endpoint: string; region: string;
     accessKeyId: string; secretAccessKey: string; sessionToken?: string;
-    forcePathStyle: boolean; checksumMode?: string;
+    forcePathStyle: boolean; checksumMode?: string; bucketName?: string;
   }) => {
     try {
       const result = await api.connect(config);
@@ -106,6 +106,7 @@ export default function App() {
           sessionToken: config.sessionToken || undefined,
           forcePathStyle: config.forcePathStyle,
           checksumMode: config.checksumMode,
+          bucketName: config.bucketName || undefined,
         };
         connToStoredRef.current.set(result.id, stored);
         upsertConnection(stored);
@@ -254,6 +255,7 @@ export default function App() {
             connectionId={activeConnection.id}
             connectionName={activeConnection.name}
             endpoint={activeConnection.endpoint}
+            initialBucket={activeConnection.defaultBucket || activeConnection.bucketName || undefined}
             onNotify={notify}
           />
         )}

@@ -10,6 +10,7 @@ interface Props {
     sessionToken?: string;
     forcePathStyle: boolean;
     checksumMode?: string;
+    bucketName?: string;
   }) => Promise<void> | void;
   persistEnabled: boolean;
   onTogglePersist: (enabled: boolean) => void;
@@ -18,7 +19,7 @@ interface Props {
 const PRESETS = [
   { label: "AWS S3", desc: "s3.amazonaws.com", endpoint: "", region: "us-east-1", pathStyle: false, checksum: "supported" },
   { label: "MinIO", desc: "Local · localhost:9000", endpoint: "http://localhost:9000", region: "us-east-1", pathStyle: true, checksum: "compatible" },
-  { label: "Cloudflare R2", desc: "Custom endpoint", endpoint: "", region: "auto", pathStyle: false, checksum: "compatible" },
+  { label: "Cloudflare R2", desc: "Custom endpoint", endpoint: "", region: "auto", pathStyle: true, checksum: "compatible" },
   { label: "DigitalOcean", desc: "Spaces · nyc3", endpoint: "", region: "nyc3", pathStyle: false, checksum: "compatible" },
   { label: "Backblaze B2", desc: "S3-compatible", endpoint: "", region: "us-west-004", pathStyle: true, checksum: "supported" },
   { label: "Custom", desc: "Any endpoint", endpoint: "", region: "us-east-1", pathStyle: true, checksum: "compatible" },
@@ -52,6 +53,7 @@ const iconChevron = (
 export default function ConnectionForm({ onConnect, persistEnabled, onTogglePersist }: Props) {
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
+  const [bucketName, setBucketName] = useState("");
   const [region, setRegion] = useState("us-east-1");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
@@ -76,6 +78,29 @@ export default function ConnectionForm({ onConnect, persistEnabled, onTogglePers
 
   const canSubmit = accessKeyId.trim() !== "" && secretAccessKey.trim() !== "" && !loading;
 
+  // If the user pastes "https://<account>.r2.cloudflarestorage.com/my-bucket",
+  // strip the trailing bucket segment so the endpoint stays valid and the
+  // bucket field is prefilled.
+  const handleEndpointChange = (value: string) => {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    let withScheme = trimmed;
+    if (trimmed && !/^https?:\/\//i.test(withScheme)) withScheme = `https://${withScheme}`;
+    try {
+      const url = new URL(withScheme);
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length > 0) {
+        setEndpoint(url.origin);
+        if (!bucketName.trim()) {
+          setBucketName(decodeURIComponent(parts[parts.length - 1]));
+        }
+        return;
+      }
+    } catch {
+      // Not a full URL yet — leave the bucket field alone.
+    }
+    setEndpoint(value);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -83,8 +108,9 @@ export default function ConnectionForm({ onConnect, persistEnabled, onTogglePers
     setError(null);
     try {
       await onConnect({
-        name: name.trim() || endpoint.trim() || "AWS S3",
+        name: name.trim() || bucketName.trim() || endpoint.trim() || "AWS S3",
         endpoint: endpoint.trim(),
+        bucketName: bucketName.trim() || undefined,
         region: region.trim() || "us-east-1",
         accessKeyId: accessKeyId.trim(),
         secretAccessKey: secretAccessKey.trim(),
@@ -142,12 +168,24 @@ export default function ConnectionForm({ onConnect, persistEnabled, onTogglePers
               id="cn-endpoint"
               className="input mono"
               value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="https://s3.amazonaws.com"
+              onChange={(e) => handleEndpointChange(e.target.value)}
+              placeholder="https://<account>.r2.cloudflarestorage.com"
               inputMode="url"
               autoComplete="url"
             />
-            <span className="field-hint">Local MinIO looks like <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>http://localhost:9000</code>. R2 and Spaces give you a custom URL.</span>
+            <span className="field-hint">Base endpoint only — no trailing <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>/bucket-name</code> needed. If you paste one anyway, we move it to the bucket field below. Local MinIO looks like <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>http://localhost:9000</code>.</span>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="cn-bucket">Bucket <span className="opt">(optional — required for single-bucket R2 tokens)</span></label>
+            <input
+              id="cn-bucket"
+              className="input mono"
+              value={bucketName}
+              onChange={(e) => setBucketName(e.target.value)}
+              placeholder="my-bucket"
+              autoComplete="off"
+            />
+            <span className="field-hint">R2 API tokens scoped to one bucket can't list buckets, so enter the bucket name here to open it directly.</span>
           </div>
           <div className="field-row">
             <div className="field">

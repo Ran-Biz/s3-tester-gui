@@ -10,6 +10,8 @@ export interface Connection {
   region: string;
   buckets: string[];
   bucketCount: number;
+  defaultBucket?: string;
+  bucketName?: string;
 }
 
 export interface BucketInfo {

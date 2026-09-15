@@ -23,6 +23,7 @@ export const api = {
     sessionToken?: string;
     forcePathStyle: boolean;
     checksumMode?: string;
+    bucketName?: string;
   }) => request<Connection>("/connect", { method: "POST", body: JSON.stringify(config) }),
 
   disconnect: (id: string) => request<{ removed: boolean }>(`/connections/${id}`, { method: "DELETE" }),
@@ -32,7 +33,7 @@ export const api = {
 
   // Buckets
   listBuckets: (connectionId: string) =>
-    request<{ buckets: BucketInfo[] }>(`/buckets/${connectionId}`),
+    request<{ buckets: BucketInfo[]; defaultBucket?: string }>(`/buckets/${connectionId}`),
 
   createBucket: (connectionId: string, bucketName: string) =>
     request<{ success: boolean; message: string }>(`/buckets/${connectionId}`, {
